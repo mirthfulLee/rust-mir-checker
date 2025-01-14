@@ -127,19 +127,28 @@ fn main() {
         return;
     }
 
-    if let Some("mir-checker") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
-        // This arm is for when `cargo mir-checker` is called. We call `cargo rustc` for each applicable target,
-        // but with the `RUSTC` env var set to the `cargo-mir-checker` binary so that we come back in the other branch,
-        // and dispatch the invocations to `rustc` and `mir-checker`, respectively.
-        in_cargo_mir_checker();
-    } else if let Some("rustc") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
-        // This arm is executed when `cargo-mir-checker` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
-        // dependencies get dispatched to `rustc`, the final library/binary to `mir-checker`.
-        inside_cargo_rustc();
-    } else {
-        show_error(
-            "`cargo-mir-checker` must be called with either `mir-checker` or `rustc` as first argument.".to_string(),
-        )
+    match std::env::args().nth(1).as_ref().map(AsRef::<str>::as_ref) {
+        Some(executable) => {
+            if executable == "mir-checker" {
+                // This arm is for when `cargo mir-checker` is called. We call `cargo rustc` for each applicable target,
+                // but with the `RUSTC` env var set to the `cargo-mir-checker` binary so that we come back in the other branch,
+                // and dispatch the invocations to `rustc` and `mir-checker`, respectively.
+                in_cargo_mir_checker();
+            } else if executable.contains("rustc") {
+                // This arm is executed when `cargo-mir-checker` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
+                // dependencies get dispatched to `rustc`, the final library/binary to `mir-checker`.
+                inside_cargo_rustc();
+            } else {
+                show_error(
+                    "Missing or invalid first argument. Expected `mir-checker` or `rustc`"
+                        .to_string(),
+                )
+            }
+        }
+        _ => show_error(format!(
+            "First argument must be either `mir-checker` or `rustc`, found {:?}",
+            std::env::args().nth(1)
+        )),
     }
 }
 

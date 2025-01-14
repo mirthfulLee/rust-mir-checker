@@ -33,6 +33,9 @@ The associated paper titled *MirChecker: Detecting Bugs in Rust Programs via Sta
     $ git clone --recursive https://github.com/lizhuohua/rust-mir-checker.git
     
     $ cd rust-mir-checker
+
+    # Copy the compiler code
+    $ cp $(rustup show home)/toolchains/nightly-2024-04-16-x86_64-unknown-linux-gnu/lib lib -r
     ```
 
 2. Build & Install
@@ -42,6 +45,8 @@ The associated paper titled *MirChecker: Detecting Bugs in Rust Programs via Sta
     $ export LIBCLANG_PATH=`llvm-config-15 --libdir`/libclang.so
     # Use the LLVM lld linker
     $ export RUSTFLAGS="-Clink-args=-fuse-ld=lld"
+    # Add enviroment variables to compile dependencies - rustc crates
+    $ export RUSTC_BOOTSTRAP=123456 CFG_RELEASE=1.99.0 CFG_RELEASE_CHANNEL=dev RUSTC_INSTALL_BINDIR=/dev/null
     # You can build and install the cargo subcommand:
     $ cargo install --path .
     

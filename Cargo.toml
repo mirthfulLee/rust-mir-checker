@@ -1,7 +1,7 @@
 [package]
 name = "rust-mir-checker"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,11 +12,11 @@ name = "cargo-mir-checker"
 name = "mir-checker"
 
 [dependencies]
-cargo_metadata = "0.9.0"
-pretty_env_logger = "0.3.1"
+cargo_metadata = "0.17.0"
+pretty_env_logger = "0.5.0"
 log = "0.4"
-proc-macro2 = "=1.0.43"
-log-derive = "0.3"
+proc-macro2 = "=1.0.80"
+log-derive = "0.4.1"
 failure = "0.1.6"
 rug = "1.11.0"
 foreign-types = "0.5.0"
@@ -27,7 +27,19 @@ itertools = "0.9.0"
 lazy_static = "1.4.0"
 az = "1.0.0"
 serde_json = "1.0.61"
+home = "0.5.9"
 apron-sys = { path = "./apron-sys" }
+
+rustc_ast = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_ast" }
+rustc_driver = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_driver" }
+rustc_errors = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_errors" }
+rustc_hir = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_hir" }
+rustc_interface = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
+rustc_middle = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_middle" }
+rustc_session = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_session" }
+rustc_span = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_span" }
+rustc_target = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_target" }
+
 
 [profile.release]
 lto = true
