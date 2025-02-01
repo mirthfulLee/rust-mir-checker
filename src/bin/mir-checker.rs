@@ -11,8 +11,9 @@ use log::info;
 
 use rust_mir_checker::analysis::option;
 use rust_mir_checker::{analysis, utils};
+use rustc_driver::{args, install_ctrlc_handler, install_ice_hook, DEFAULT_BUG_REPORT_URL};
 use rustc_session::config::ErrorOutputType;
-use rustc_session::early_error;
+use rustc_session::EarlyDiagCtxt;
 use std::env;
 use std::process;
 
@@ -22,22 +23,13 @@ pub const EXIT_SUCCESS: i32 = 0;
 /// Exit status code used for compilation failures and invalid flags.
 pub const EXIT_FAILURE: i32 = 1;
 
-fn main() {
+fn main() -> ! {
     // Initialize logger
     pretty_env_logger::init();
+    let early_dcx = EarlyDiagCtxt::new(ErrorOutputType::default());
 
     let result = rustc_driver::catch_fatal_errors(move || {
-        let mut rustc_args = env::args_os()
-            .enumerate()
-            .map(|(i, arg)| {
-                arg.into_string().unwrap_or_else(|arg| {
-                    early_error(
-                        ErrorOutputType::default(),
-                        &format!("Argument {} is not valid Unicode: {:?}", i, arg),
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
+        let mut rustc_args = args::raw_args(&early_dcx)?;
 
         if let Some(sysroot) = utils::compile_time_sysroot() {
             let sysroot_flag = "--sysroot";
@@ -50,10 +42,13 @@ fn main() {
 
         // If this environment variable is set, we behave just like the real rustc
         if env::var_os("MIR_CHECKER_BE_RUSTC").is_some() {
-            rustc_driver::init_rustc_env_logger();
+            rustc_driver::init_rustc_env_logger(&early_dcx);
             // We cannot use `rustc_driver::main` as we need to adjust the CLI arguments.
             let mut callbacks = rustc_driver::TimePassesCallbacks::default();
-            let run_compiler = rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks);
+            let using_internal_features = install_ice_hook(DEFAULT_BUG_REPORT_URL, |_| ());
+            install_ctrlc_handler();
+            let run_compiler = rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks)
+                .set_using_internal_features(using_internal_features);
             run_compiler.run()
         } else {
             let always_encode_mir = "-Zalways_encode_mir";
@@ -76,8 +71,7 @@ fn main() {
             let run_compiler = rustc_driver::RunCompiler::new(&rustc_args, &mut callbacks);
             run_compiler.run()
         }
-    })
-    .and_then(|result| result);
+    });
 
     let exit_code = match result {
         Ok(_) => EXIT_SUCCESS,

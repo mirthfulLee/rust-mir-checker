@@ -3,6 +3,7 @@
 #![feature(core_intrinsics)]
 // #![feature(box_syntax)]
 #![feature(rustc_attrs)]
+#![feature(generic_nonzero)]
 #[rustc_box]
 // #![feature(vec_remove_item)]
 

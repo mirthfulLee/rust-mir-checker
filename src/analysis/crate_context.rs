@@ -9,11 +9,11 @@
 
 use crate::analysis::memory::constant_value::ConstantValueCache;
 use crate::analysis::memory::known_names::KnownNamesCache;
-use rustc_errors::DiagnosticBuilder;
+use rustc_errors::Diag as DiagnosticBuilder;
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::subst::SubstsRef;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
+use rustc_middle::ty::GenericArgsRef;
 
 /// A visitor that takes information gathered by the Rust compiler when compiling a particular
 /// crate and then analyses some of the functions in that crate to see if any of the assertions
@@ -31,7 +31,7 @@ pub struct CrateContext<'compiler, 'tcx> {
 
     pub known_names_cache: KnownNamesCache,
 
-    pub substs_cache: HashMap<DefId, SubstsRef<'tcx>>,
+    pub substs_cache: HashMap<DefId, GenericArgsRef<'tcx>>,
 }
 
 impl<'compiler, 'tcx> Debug for CrateContext<'compiler, 'tcx> {

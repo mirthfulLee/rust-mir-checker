@@ -12,8 +12,7 @@ use super::path::Path;
 use super::symbolic_value::SymbolicValue;
 use rug::Integer;
 
-use rustc_ast::ast;
-use rustc_middle::ty::{Ty, TyCtxt, TyKind};
+use rustc_middle::ty::{Ty, TyCtxt, TyKind, IntTy, UintTy};
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter, Result};
 use std::rc::Rc;
@@ -336,25 +335,32 @@ impl<'a> From<&TyKind<'a>> for ExpressionType {
     fn from(ty_kind: &TyKind<'a>) -> ExpressionType {
         match ty_kind {
             TyKind::Bool => ExpressionType::Bool,
-            TyKind::Int(ast::IntTy::Isize) => ExpressionType::Isize,
-            TyKind::Int(ast::IntTy::I8) => ExpressionType::I8,
-            TyKind::Int(ast::IntTy::I16) => ExpressionType::I16,
-            TyKind::Int(ast::IntTy::I32) => ExpressionType::I32,
-            TyKind::Int(ast::IntTy::I64) => ExpressionType::I64,
-            TyKind::Int(ast::IntTy::I128) => ExpressionType::I128,
-            TyKind::Uint(ast::UintTy::Usize) => ExpressionType::Usize,
-            TyKind::Uint(ast::UintTy::U8) => ExpressionType::U8,
-            TyKind::Uint(ast::UintTy::U16) => ExpressionType::U16,
-            TyKind::Uint(ast::UintTy::U32) => ExpressionType::U32,
-            TyKind::Uint(ast::UintTy::U64) => ExpressionType::U64,
-            TyKind::Uint(ast::UintTy::U128) => ExpressionType::U128,
+            TyKind::Int(IntTy::Isize) => ExpressionType::Isize,
+            TyKind::Int(IntTy::I8) => ExpressionType::I8,
+            TyKind::Int(IntTy::I16) => ExpressionType::I16,
+            TyKind::Int(IntTy::I32) => ExpressionType::I32,
+            TyKind::Int(IntTy::I64) => ExpressionType::I64,
+            TyKind::Int(IntTy::I128) => ExpressionType::I128,
+            TyKind::Uint(UintTy::Usize) => ExpressionType::Usize,
+            TyKind::Uint(UintTy::U8) => ExpressionType::U8,
+            TyKind::Uint(UintTy::U16) => ExpressionType::U16,
+            TyKind::Uint(UintTy::U32) => ExpressionType::U32,
+            TyKind::Uint(UintTy::U64) => ExpressionType::U64,
+            TyKind::Uint(UintTy::U128) => ExpressionType::U128,
             TyKind::Closure(..)
             | TyKind::Dynamic(..)
             | TyKind::Foreign(..)
             | TyKind::FnDef(..)
             | TyKind::FnPtr(..)
-            | TyKind::Generator(..)
-            | TyKind::GeneratorWitness(..)
+            // FIXME: replace generator to other type kinds
+            // | TyKind::Generator(..)
+            // | TyKind::GeneratorWitness(..)
+            | TyKind::Adt(..)
+            | TyKind::Float(..)
+            | TyKind::Array(..)
+            | TyKind::Tuple(..)
+            | TyKind::Pat(.. )
+            | TyKind::Alias(..)
             | TyKind::RawPtr(..)
             | TyKind::Ref(..)
             | TyKind::Slice(..)
@@ -381,7 +387,7 @@ impl ExpressionType {
             U64 => tcx.types.u64,
             U128 => tcx.types.u128,
             Usize => tcx.types.usize,
-            Reference => tcx.mk_ty(TyKind::Str),
+            Reference => tcx.mk_ty_from_kind(TyKind::Str),
             NonPrimitive => tcx.types.trait_object_dummy_self,
         }
     }

@@ -31,6 +31,8 @@ home = "0.5.9"
 apron-sys = { path = "./apron-sys" }
 
 rustc_ast = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_ast" }
+rustc_abi = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_abi" }
+rustc_data_structures = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_data_structures" }
 rustc_driver = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_driver" }
 rustc_errors = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_errors" }
 rustc_hir = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_hir" }

@@ -8,6 +8,7 @@ use rustc_interface::interface;
 use rustc_interface::Queries;
 use rustc_middle::ty::TyCtxt;
 
+
 pub struct MirCheckerCallbacks {
     pub analysis_options: AnalysisOption,
     pub source_name: String,
@@ -25,8 +26,11 @@ impl MirCheckerCallbacks {
 impl rustc_driver::Callbacks for MirCheckerCallbacks {
     /// Called before creating the compiler instance
     fn config(&mut self, config: &mut interface::Config) {
-        self.source_name = config.input.source_name().to_string();
-        config.crate_cfg.insert(("mir_checker".to_string(), None));
+        match config.input.source_name().into_local_path() {
+            Some(p) => self.source_name = p.to_string_lossy().to_string(),
+            None => unreachable!(),
+        };
+        config.crate_cfg.insert(0, "mir_checker".to_string());
         info!("Source file: {}", self.source_name);
     }
 
@@ -40,7 +44,6 @@ impl rustc_driver::Callbacks for MirCheckerCallbacks {
         queries
             .global_ctxt()
             .unwrap()
-            .peek_mut()
             .enter(|tcx| self.run_analysis(compiler, tcx));
         Compilation::Continue
     }
@@ -66,11 +69,11 @@ impl MirCheckerCallbacks {
         }
 
         // Initialize global analysis context
-        if let Some(mut global_context) =
-            GlobalContext::new(compiler.session(), tcx, self.analysis_options.clone())
+        if let Some(global_context) =
+            GlobalContext::new(&compiler.sess, tcx, self.analysis_options.clone())
         {
             // Initialize numerical analyzer
-            let mut numerical_analysis = NumericalAnalysis::new(&mut global_context);
+            let numerical_analysis = NumericalAnalysis::new(global_context);
             // Run analyzer
             if let Ok(analysis_result) = numerical_analysis.run() {
                 info!(

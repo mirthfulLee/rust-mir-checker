@@ -15,78 +15,70 @@ use rustc_hir::def_id::DefId;
 use std::time::Instant;
 
 /// Traverse over a crate, analyze all functions and emit diagnoses
-pub struct NumericalAnalysis<'tcx, 'a, 'compiler> {
+pub struct NumericalAnalysis<'tcx, 'compiler> {
     /// The global context
-    pub context: &'a mut GlobalContext<'tcx, 'compiler>,
+    pub context: GlobalContext<'tcx, 'compiler>,
 }
 
-impl<'tcx, 'a, 'compiler> StaticAnalysis<'tcx, 'a, 'compiler>
-    for NumericalAnalysis<'tcx, 'a, 'compiler>
+impl<'tcx, 'compiler> StaticAnalysis<'tcx, 'compiler>
+    for NumericalAnalysis<'tcx, 'compiler>
 {
-    fn new(context: &'a mut GlobalContext<'tcx, 'compiler>) -> Self {
+    fn new(context: GlobalContext<'tcx, 'compiler>) -> Self {
         NumericalAnalysis { context }
     }
 
-    fn emit_diagnostics(&mut self) {
-        let mut diagnostics: Vec<&mut Diagnostic<'_>> = self
+    fn emit_diagnostics(self) {
+        let mut diagnostics: Vec<Diagnostic<'_>> = self
             .context
             .diagnostics_for
             .map
-            .values_mut()
+            .into_values()
             .flatten()
             .collect();
 
         diagnostics.sort_by(Diagnostic::compare);
 
+        // TODO(huan): the level of diagnostics cannot be updated in new versions
         // If `deny_warnings` flag is set, change all diagnoses' level to `error`
         // This is used for debugging
-        if self.context.analysis_options.deny_warnings {
-            for diag in &mut diagnostics {
-                diag.builder.level = rustc_errors::Level::Error;
-            }
-        }
+        // if self.context.analysis_options.deny_warnings {
+        //     for diag in &mut diagnostics {
+        //         diag.builder.inner.level = rustc_errors::Level::Error;
+        //     }
+        // }
 
         // According to `suppress_warnings` flag, filter out warnings that users want to ignore
-        let mut diagnostics: Vec<&mut Diagnostic<'_>> =
-            if let Some(suppressed_warnings) = &self.context.analysis_options.suppressed_warnings {
-                let mut res: Vec<&mut Diagnostic<'_>> = Vec::new();
-                for diag in diagnostics.iter_mut() {
-                    if suppressed_warnings.contains(&diag.cause) {
-                        diag.cancel();
-                    } else {
-                        res.push(diag);
-                    }
+        let mut res: Vec<Diagnostic<'_>> = Vec::new();
+        if let Some(suppressed_warnings) = &self.context.analysis_options.suppressed_warnings {
+            for diag in diagnostics.into_iter() {
+                if suppressed_warnings.contains(&diag.cause) {
+                    diag.cancel();
+                } else {
+                    res.push(diag);
                 }
-                res
-            } else {
-                diagnostics.into_iter().collect()
-            };
+            }
+        } else {
+            res = diagnostics;
+        };
 
         // According to `memory_safety_only` flag, filter only memory-safety diagnosis
         // Cancel other diagnoses that will not be emitted
-        let diagnostics_to_emit: Vec<&mut Diagnostic<'_>> =
-            if self.context.analysis_options.memory_safety_only {
-                let mut res: Vec<&mut Diagnostic<'_>> = Vec::new();
-                for diag in diagnostics.iter_mut() {
-                    if diag.is_memory_safety {
-                        res.push(diag);
-                    } else {
-                        diag.cancel();
-                    }
+        if self.context.analysis_options.memory_safety_only {
+            for diag in res.into_iter() {
+                if diag.is_memory_safety {
+                    diag.emit()
+                } else {
+                    diag.cancel();
                 }
-                res
-            } else {
-                diagnostics.into_iter().collect()
-            };
-
-        fn emit(db: &mut Diagnostic<'_>) {
-            db.emit();
-        }
-
-        diagnostics_to_emit.into_iter().for_each(emit);
+            }
+        } else {
+            for diag in res.into_iter() {
+                diag.emit()
+            }
+        };
     }
 
-    fn run(&mut self) -> Result<AnalysisInfo> {
+    fn run(mut self) -> Result<AnalysisInfo> {
         let timer = Instant::now();
 
         info!("================== Numerical Analysis Starts ==================");
@@ -162,7 +154,7 @@ impl<'tcx, 'a, 'compiler> StaticAnalysis<'tcx, 'a, 'compiler>
 
         // Compute the fixed-point of the function specified by `def_id`
         let mut wto_visitor =
-            WtoFixPointIterator::new(self.context, def_id, abstract_domain, 0, vec![]);
+            WtoFixPointIterator::new(&mut self.context, def_id, abstract_domain, 0, vec![]);
         wto_visitor.init_promote_constants();
         wto_visitor.run();
 

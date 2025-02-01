@@ -42,7 +42,7 @@ where
 
     fn run(&mut self) {
         info!("====== Assertion Checker starts ======");
-        let basic_blocks = self.body_visitor.wto.basic_blocks().clone();
+        let basic_blocks = self.body_visitor.wto.basic_blocks.clone();
         for (bb, bb_data) in basic_blocks.iter_enumerated() {
             let term = bb_data.terminator();
             let post = self.body_visitor.post.clone();
@@ -89,7 +89,7 @@ where
                 if let Some(cond_val) = self.body_visitor.place_to_abstract_value.get(&place) {
                     debug!("place: {:?}, cond_val: {:?}", place, cond_val);
                     let cond_val = cond_val.clone();
-                    let check_result = match msg {
+                    let check_result = match **msg {
                         mir::AssertKind::Overflow(..) => {
                             self.check_overflow(cond_val.clone(), *expected, abstract_value)
                         }
@@ -99,33 +99,31 @@ where
                     match check_result {
                         CheckerResult::Safe => (),
                         CheckerResult::Unsafe => {
-                            let error = self.body_visitor.context.session.struct_span_warn(
+                            let error = self.body_visitor.context.session.dcx().struct_span_warn(
                                 span,
                                 format!(
                                     "[MirChecker] Provably error: {:?}",
                                     self.body_visitor.recover_var_name(msg)
                                 )
-                                .as_str(),
                             );
                             self.body_visitor.emit_diagnostic(
                                 error,
                                 false,
-                                DiagnosticCause::from(msg),
+                                DiagnosticCause::from(&**msg),
                             );
                         }
                         CheckerResult::Warning => {
-                            let warning = self.body_visitor.context.session.struct_span_warn(
+                            let warning = self.body_visitor.context.session.dcx().struct_span_warn(
                                 span,
                                 format!(
                                     "[MirChecker] Possible error: {:?}",
                                     self.body_visitor.recover_var_name(msg)
                                 )
-                                .as_str(),
                             );
                             self.body_visitor.emit_diagnostic(
                                 warning,
                                 false,
-                                DiagnosticCause::from(msg),
+                                DiagnosticCause::from(&**msg),
                             );
                         }
                     }
@@ -264,7 +262,7 @@ where
                             if let Some(rustc_type) =
                                 self.body_visitor.type_visitor.path_ty_cache.get(&new_path)
                             {
-                                self.check_within_range(new_path, rustc_type, abstract_value)
+                                self.check_within_range(new_path, *rustc_type, abstract_value)
                             } else {
                                 unreachable!(
                                     "Value that we want to test does not have type infomation"

@@ -17,6 +17,7 @@ use crate::analysis::numerical::apron_domain::{
 };
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{Ty, TyCtxt, TyKind};
+use rustc_target::abi::FieldIdx;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter, Result};
@@ -86,7 +87,7 @@ impl Path {
 }
 
 /// A path represents a left hand side expression.
-#[derive(Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub enum PathEnum {
     /// A path to a value that is not stored at a single memory location.
     /// For example, a compile time constant will not have a location.
@@ -133,6 +134,73 @@ pub enum PathEnum {
         qualifier: Rc<Path>,
         selector: Rc<PathSelector>,
     },
+}
+
+impl PartialOrd for PathEnum {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (PathEnum::Alias { value: v1 }, PathEnum::Alias { value: v2 }) => v1.partial_cmp(v2),
+            (PathEnum::HeapBlock { value: v1 }, PathEnum::HeapBlock { value: v2 }) => {
+                v1.partial_cmp(v2)
+            }
+            (PathEnum::LocalVariable { ordinal: o1 }, PathEnum::LocalVariable { ordinal: o2 }) => {
+                o1.partial_cmp(o2)
+            }
+            (PathEnum::Parameter { ordinal: o1 }, PathEnum::Parameter { ordinal: o2 }) => {
+                o1.partial_cmp(o2)
+            }
+            (PathEnum::Result, PathEnum::Result) => Some(std::cmp::Ordering::Equal),
+            (
+                PathEnum::StaticVariable {
+                    summary_cache_key: k1,
+                    expression_type: e1,
+                    ..
+                },
+                PathEnum::StaticVariable {
+                    summary_cache_key: k2,
+                    expression_type: e2,
+                    ..
+                },
+            ) => {
+                if k1 != k2 {
+                    k1.partial_cmp(k2)
+                } else {
+                    e1.partial_cmp(e2)
+                }
+            }
+            (
+                PathEnum::PromotedConstant { ordinal: o1 },
+                PathEnum::PromotedConstant { ordinal: o2 },
+            ) => o1.partial_cmp(o2),
+            (
+                PathEnum::QualifiedPath {
+                    length: l1,
+                    qualifier: q1,
+                    selector: s1,
+                },
+                PathEnum::QualifiedPath {
+                    length: l2,
+                    qualifier: q2,
+                    selector: s2,
+                },
+            ) => {
+                if l1 != l2 {
+                    l1.partial_cmp(l2)
+                } else if q1 != q2 {
+                    q1.partial_cmp(q2)
+                } else {
+                    s1.partial_cmp(s2)
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Ord for PathEnum {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Less)
+    }
 }
 
 impl Debug for PathEnum {
@@ -243,7 +311,7 @@ impl Path {
             PathEnum::StaticVariable {
                 def_id: Some(def_id),
                 summary_cache_key: name,
-                expression_type: ExpressionType::from(ty.kind()),
+                expression_type: ExpressionType::from(ty.skip_binder().kind()),
             }
             .into(),
         )
@@ -357,8 +425,8 @@ impl Path {
                     return Some(path0);
                 }
                 let path0 = Path::new_field(path.clone(), 0);
-                for v in def.variants.iter() {
-                    if let Some(field0) = v.fields.get(0) {
+                for v in def.variants().iter() {
+                    if let Some(field0) = v.fields.get(FieldIdx::from_u32(0)) {
                         let field0_ty = field0.ty(tcx, substs);
                         let result = Self::get_path_to_field_at_offset_0(
                             tcx, // environment,
@@ -372,7 +440,7 @@ impl Path {
                 None
             }
             TyKind::Tuple(substs) => {
-                if let Some(field0_ty) = substs.iter().map(|s| s.expect_ty()).next() {
+                if let Some(field0_ty) = substs.iter().map(|s| s).next() {
                     let path0 = Path::new_field(path.clone(), 0);
                     return Self::get_path_to_field_at_offset_0(
                         tcx, // environment,

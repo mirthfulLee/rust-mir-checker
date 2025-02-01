@@ -78,28 +78,21 @@ impl<'tcx, 'compiler> GlobalContext<'tcx, 'compiler> {
     ) -> Option<Self> {
         if analysis_options.show_entries {
             let mut names = HashSet::new();
-            for def_id in tcx.body_owners() {
+            for def_id in tcx.iter_local_def_id() {
                 if tcx.def_kind(def_id) == DefKind::Fn || tcx.def_kind(def_id) == DefKind::AssocFn {
                     let name = tcx.item_name(def_id.to_def_id());
                     if !names.contains(&name) {
                         names.insert(name);
                         println!("{}", name);
                     }
-                    // println!("{}", def_id.to_def_id().index.as_u32());
                 }
             }
             return None;
         }
 
         if analysis_options.show_entries_index {
-            // let mut names = HashSet::new();
-            for def_id in tcx.body_owners() {
+            for def_id in tcx.iter_local_def_id() {
                 if tcx.def_kind(def_id) == DefKind::Fn || tcx.def_kind(def_id) == DefKind::AssocFn {
-                    // let name = tcx.item_name(def_id.to_def_id());
-                    // if !names.contains(&name) {
-                    //     names.insert(name);
-                    //     println!("{}", name);
-                    // }
                     println!("{}", def_id.to_def_id().index.as_u32());
                 }
             }
@@ -110,7 +103,7 @@ impl<'tcx, 'compiler> GlobalContext<'tcx, 'compiler> {
         let mut entry_func = None;
 
         // List functions
-        for def_id in tcx.body_owners() {
+        for def_id in tcx.iter_local_def_id() {
             let def_kind = tcx.def_kind(def_id);
             // Find the DefId for the entry point, note that the entry point must be a function
             if def_kind == DefKind::Fn || def_kind == DefKind::AssocFn {

@@ -8,9 +8,9 @@ use rustc_hir::def_id::DefId;
 
 /// General trait for static analysis
 /// Developers may reuse this trait to implement their own analysis
-pub trait StaticAnalysis<'tcx, 'a, 'compiler> {
-    fn new(context: &'a mut GlobalContext<'tcx, 'compiler>) -> Self;
-    fn run(&mut self) -> Result<AnalysisInfo>;
+pub trait StaticAnalysis<'tcx, 'compiler> {
+    fn new(context: GlobalContext<'tcx, 'compiler>) -> Self;
+    fn run(self) -> Result<AnalysisInfo>;
     fn analyze_function<DomainType>(
         &mut self,
         def_id: DefId,
@@ -18,5 +18,5 @@ pub trait StaticAnalysis<'tcx, 'a, 'compiler> {
     ) where
         DomainType: ApronDomainType,
         ApronAbstractDomain<DomainType>: GetManagerTrait;
-    fn emit_diagnostics(&mut self);
+    fn emit_diagnostics(self);
 }

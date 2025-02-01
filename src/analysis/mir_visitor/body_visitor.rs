@@ -21,7 +21,7 @@ use crate::checker::checker_trait::CheckerTrait;
 use itertools::Itertools;
 use log::{debug, error, warn};
 use rug::Integer;
-use rustc_errors::DiagnosticBuilder;
+use rustc_errors::Diag as DiagnosticBuilder;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::ty::{Ty, TyKind};
@@ -179,7 +179,8 @@ where
 
         // Cancel the buffered diagnostics because they have been copied into global context
         // If not, the compiler will emit a bug when dropping them
-        for diagnostic in &mut self.buffered_diagnostics {
+        let diags = std::mem::take(&mut self.buffered_diagnostics);
+        for diagnostic in diags.into_iter() {
             diagnostic.cancel();
         }
     }
@@ -354,7 +355,7 @@ where
             // Promoting a reference to a reference.
             ordinal += 99;
             let value_path: Rc<Path> = Rc::new(PathEnum::PromotedConstant { ordinal }.into());
-            self.promote_reference(environment, ty, &value_path, local_path, ordinal);
+            self.promote_reference(environment, *ty, &value_path, local_path, ordinal);
             let promoted_value = SymbolicValue::make_from(Expression::Reference(value_path), 1);
             environment.update_value_at(promoted_root.clone(), promoted_value);
         } else {
@@ -526,7 +527,6 @@ where
                             );
                             match ty.kind() {
                                 TyKind::Adt(..) if ty.is_enum() => {}
-                                TyKind::Generator(..) => {}
                                 _ => {
                                     result = Some(self.get_u128_const_val(0));
                                 }
@@ -626,7 +626,8 @@ where
             } else {
                 None
             };
-            let ty = self.context.tcx.type_of(def_id);
+            // FIXME(huan): use skip_binder or initiali
+            let ty = self.context.tcx.type_of(def_id).skip_binder();
             let func_const = self
                 .crate_context
                 .constant_value_cache
@@ -812,13 +813,13 @@ where
                     self.get_var_name(r)
                 )
             }
-            _ => format!("{}", assert_kind.description()),
+            _ => format!("{:?}", assert_kind),
         }
     }
 
     pub fn emit_diagnostic(
         &mut self,
-        mut diagnostic_builder: DiagnosticBuilder<'compiler>,
+        diagnostic_builder: DiagnosticBuilder<'compiler, ()>,
         is_memory_safety: bool,
         cause: DiagnosticCause,
     ) {
@@ -914,7 +915,7 @@ where
         debug!("Start merging state from predecessors");
         let pred_states: Vec<AbstractDomain<DomainType>> =
             // For all predecessors of bb
-            self.wto.get_mir().predecessors()[bb]
+            self.wto.get_mir().basic_blocks.predecessors()[bb]
                 .iter()
                 .filter_map(|pred_bb| {
                     // For a predecessor pred_bb, get the post condition

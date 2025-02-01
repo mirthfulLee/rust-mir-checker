@@ -14,8 +14,7 @@ use super::utils;
 use az::OverflowingCast;
 use rug::Integer;
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::subst::SubstsRef;
-use rustc_middle::ty::{Ty, TyCtxt};
+use rustc_middle::ty::{Ty, TyCtxt, GenericArgsRef};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::rc::Rc;
@@ -48,7 +47,7 @@ impl Debug for ConstantValue {
 }
 
 /// Information that identifies a function or generic function instance.
-#[derive(Clone, Debug, Eq, PartialOrd, PartialEq, Hash, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FunctionReference {
     /// The crate specific key that is used to identify the function in the current crate.
     /// This is not available for functions returned by calls to functions from other crates,
@@ -66,13 +65,36 @@ pub struct FunctionReference {
     pub function_name: Rc<String>,
 }
 
+/// For the sake of incremental compilation, the DefId does not support Ord and PartialOrd, so we need to
+/// implement it ourselves.
+impl PartialOrd for FunctionReference {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.function_id != other.function_id {
+            return self.function_id.partial_cmp(&other.function_id);
+        }
+        if self.generic_arguments != other.generic_arguments {
+            return self.generic_arguments.partial_cmp(&other.generic_arguments);
+        }
+        if self.known_name != other.known_name {
+            return self.known_name.partial_cmp(&other.known_name);
+        }
+        self.function_name.partial_cmp(&other.function_name)
+    }
+}
+
+impl Ord for FunctionReference {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 /// Constructors
 impl ConstantValue {
     /// Returns a constant value that is a reference to a function
     pub fn for_function<'a, 'tcx, 'compiler>(
         function_id: usize,
         def_id: DefId,
-        generic_args: Option<SubstsRef<'tcx>>,
+        generic_args: Option<GenericArgsRef<'tcx>>,
         tcx: TyCtxt<'tcx>,
         known_names_cache: &mut KnownNamesCache,
     ) -> ConstantValue {
@@ -404,7 +426,7 @@ impl<'tcx> ConstantValueCache<'tcx> {
         &mut self,
         def_id: DefId,
         ty: Ty<'tcx>,
-        generic_args: Option<SubstsRef<'tcx>>,
+        generic_args: Option<GenericArgsRef<'tcx>>,
         tcx: TyCtxt<'tcx>,
         known_names_cache: &mut KnownNamesCache,
     ) -> &ConstantValue {

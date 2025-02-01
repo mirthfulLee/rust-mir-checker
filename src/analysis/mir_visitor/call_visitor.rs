@@ -24,8 +24,8 @@ use crate::checker::checker_trait::CheckerTrait;
 use itertools::Itertools;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
-use rustc_middle::ty::subst::SubstsRef;
-use rustc_middle::ty::{Ty, TyKind};
+use rustc_middle::ty::{GenericArgsRef, Ty, TyKind};
+use rustc_span::source_map::Spanned;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter, Result};
 use std::rc::Rc;
@@ -48,7 +48,7 @@ where
     pub callee_fun_val: Rc<SymbolicValue>,
 
     /// The callee's generic argument list
-    pub callee_generic_arguments: Option<SubstsRef<'tcx>>,
+    pub callee_generic_arguments: Option<GenericArgsRef<'tcx>>,
 
     /// The callee's KnownNames
     pub callee_known_name: KnownNames,
@@ -56,7 +56,7 @@ where
     /// The callee's generic arguments' types
     pub callee_generic_argument_map: Option<HashMap<rustc_span::Symbol, Ty<'tcx>>>,
 
-    pub args: &'call [mir::Operand<'tcx>],
+    pub args: &'call [Spanned<mir::Operand<'tcx>>],
 
     /// The actual arguments of the callee, the paths and symbolic values are from the caller
     pub actual_args: &'call [(Rc<Path>, Rc<SymbolicValue>)],
@@ -65,7 +65,9 @@ where
     pub actual_argument_types: &'call [Ty<'tcx>],
 
     /// The destination where the return value is assigned
-    pub destination: Option<(mir::Place<'tcx>, mir::BasicBlock)>,
+    pub destination: Option<mir::Place<'tcx>>,
+
+    pub target: Option<mir::BasicBlock>,
 
     /// If the arguments are functions, store them
     pub function_constant_args: &'call [(Rc<Path>, Rc<SymbolicValue>)],
@@ -94,7 +96,7 @@ where
     pub(crate) fn new(
         block_visitor: &'call mut BlockVisitor<'tcx, 'analysis, 'block, 'compilation, DomainType>,
         callee_def_id: DefId,
-        callee_generic_arguments: Option<SubstsRef<'tcx>>,
+        callee_generic_arguments: Option<GenericArgsRef<'tcx>>,
         callee_generic_argument_map: Option<HashMap<rustc_span::Symbol, Ty<'tcx>>>,
         func_const: ConstantValue,
     ) -> CallVisitor<'call, 'block, 'analysis, 'compilation, 'tcx, DomainType> {
@@ -115,6 +117,7 @@ where
                 destination: None,
                 function_constant_args: &[],
                 call_stack: active_calls,
+                target: None,
             }
         } else {
             unreachable!("caller should supply a constant function")
@@ -257,7 +260,7 @@ where
                                 );
                             return extract_func_ref(self.block_visitor.visit_function_reference(
                                 *def_id,
-                                ty,
+                                *ty,
                                 specialized_substs,
                             ));
                         }
@@ -289,7 +292,7 @@ where
     /// result is false, just carry on with the normal logic.
     pub fn handled_as_special_function_call(&mut self) -> bool {
         let destination_path = if let Some(dest) = self.destination {
-            Some(self.block_visitor.get_path_for_place(&dest.0))
+            Some(self.block_visitor.get_path_for_place(&dest))
         } else {
             None
         };
@@ -421,7 +424,7 @@ where
         let length = self.actual_args[0].1.clone();
         let alignment = self.actual_args[1].1.clone();
         let tcx = self.block_visitor.body_visitor.context.tcx;
-        let byte_slice = tcx.mk_slice(tcx.types.u8);
+        let byte_slice = tcx.mk_ty_from_kind(TyKind::Slice(tcx.types.u8));
         let heap_path = Path::get_as_path(
             self.block_visitor
                 .body_visitor
@@ -586,7 +589,7 @@ where
         assert!(self.actual_args.len() == 1);
         let source = &self.actual_args[0].0;
         let destination_path = if let Some(dest) = self.destination {
-            Some(self.block_visitor.get_path_for_place(&dest.0))
+            Some(self.block_visitor.get_path_for_place(&dest))
         } else {
             None
         };
@@ -611,7 +614,7 @@ where
 
         // The source
         let source = self.args[0].clone();
-        if let Some(taint_sources) = block_visitor.extract_local_from_operand(&source) {
+        if let Some(taint_sources) = block_visitor.extract_local_from_operand(&source.node) {
             for local in taint_sources {
                 block_visitor.body_visitor.tainted_variables.insert(local);
             }
@@ -621,7 +624,7 @@ where
         block_visitor
             .body_visitor
             .tainted_variables
-            .insert(self.destination.unwrap().0.local);
+            .insert(self.destination.unwrap().local);
     }
 
     fn handle_panic(&mut self) {
@@ -629,9 +632,9 @@ where
         assert!(self.destination.is_none());
         let body_visitor = &mut self.block_visitor.body_visitor;
         if !body_visitor.state.is_bottom() {
-            let warning = body_visitor.context.session.struct_span_warn(
+            let warning = body_visitor.context.session.dcx().struct_span_warn(
                 body_visitor.current_span,
-                format!("[MirChecker] Possible error: run into panic code").as_str(),
+                format!("[MirChecker] Possible error: run into panic code"),
             );
             body_visitor.emit_diagnostic(warning, false, DiagnosticCause::Panic);
         }
@@ -641,7 +644,7 @@ where
         assert!(self.actual_args.len() == 1);
         let source = &self.actual_args[0].0;
         let destination_path = if let Some(dest) = self.destination {
-            Some(self.block_visitor.get_path_for_place(&dest.0))
+            Some(self.block_visitor.get_path_for_place(&dest))
         } else {
             None
         };
@@ -659,7 +662,7 @@ where
     fn handle_index(&mut self) {
         assert!(self.actual_args.len() == 2);
         let destination_path = if let Some(dest) = self.destination {
-            Some(self.block_visitor.get_path_for_place(&dest.0))
+            Some(self.block_visitor.get_path_for_place(&dest))
         } else {
             None
         };
@@ -692,17 +695,17 @@ where
         match check_result {
             CheckerResult::Safe => (),
             CheckerResult::Unsafe => {
-                let error = body_visitor.context.session.struct_span_warn(
+                let error = body_visitor.context.session.dcx().struct_span_warn(
                     body_visitor.current_span,
-                    format!("[MirChecker] Provably error: index out of bound",).as_str(),
+                    format!("[MirChecker] Provably error: index out of bound",),
                 );
                 body_visitor.emit_diagnostic(error, false, DiagnosticCause::Index);
                 return;
             }
             CheckerResult::Warning => {
-                let warning = body_visitor.context.session.struct_span_warn(
+                let warning = body_visitor.context.session.dcx().struct_span_warn(
                     body_visitor.current_span,
-                    format!("[MirChecker] Possible error: index out of bound").as_str(),
+                    format!("[MirChecker] Possible error: index out of bound"),
                 );
                 body_visitor.emit_diagnostic(warning, false, DiagnosticCause::Index);
             }
@@ -808,7 +811,7 @@ where
 
         debug!("Start to transfer and refine normal return state");
         let destination_path = if let Some(dest) = self.destination {
-            Some(self.block_visitor.get_path_for_place(&dest.0))
+            Some(self.block_visitor.get_path_for_place(&dest))
         } else {
             None
         };
