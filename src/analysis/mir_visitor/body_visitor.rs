@@ -626,7 +626,6 @@ where
             } else {
                 None
             };
-            // FIXME(huan): use skip_binder or initiali
             let ty = self.context.tcx.type_of(def_id).skip_binder();
             let func_const = self
                 .crate_context

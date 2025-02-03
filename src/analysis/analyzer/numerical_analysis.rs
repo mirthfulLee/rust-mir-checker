@@ -20,9 +20,7 @@ pub struct NumericalAnalysis<'tcx, 'compiler> {
     pub context: GlobalContext<'tcx, 'compiler>,
 }
 
-impl<'tcx, 'compiler> StaticAnalysis<'tcx, 'compiler>
-    for NumericalAnalysis<'tcx, 'compiler>
-{
+impl<'tcx, 'compiler> StaticAnalysis<'tcx, 'compiler> for NumericalAnalysis<'tcx, 'compiler> {
     fn new(context: GlobalContext<'tcx, 'compiler>) -> Self {
         NumericalAnalysis { context }
     }
@@ -34,18 +32,18 @@ impl<'tcx, 'compiler> StaticAnalysis<'tcx, 'compiler>
             .map
             .into_values()
             .flatten()
+            .map(|d| {
+                // If `deny_warnings` flag is set, change all diagnoses' level to `error`
+                // This is used for debugging
+                if self.context.analysis_options.deny_warnings {
+                    d.upgrade_to_error()
+                } else {
+                    d
+                }
+            })
             .collect();
 
         diagnostics.sort_by(Diagnostic::compare);
-
-        // TODO(huan): the level of diagnostics cannot be updated in new versions
-        // If `deny_warnings` flag is set, change all diagnoses' level to `error`
-        // This is used for debugging
-        // if self.context.analysis_options.deny_warnings {
-        //     for diag in &mut diagnostics {
-        //         diag.builder.inner.level = rustc_errors::Level::Error;
-        //     }
-        // }
 
         // According to `suppress_warnings` flag, filter out warnings that users want to ignore
         let mut res: Vec<Diagnostic<'_>> = Vec::new();

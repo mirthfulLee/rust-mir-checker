@@ -31,11 +31,13 @@ use rustc_abi::Size;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::{alloc_range, AllocRange, CtfeProvenance, Scalar};
 use rustc_middle::mir::{self, UnwindAction};
+use rustc_middle::query::Key;
 use rustc_middle::ty::{
     Const, ConstKind, GenericArgsRef, ParamConst, ScalarInt, Ty, TyKind, UserTypeAnnotationIndex,
     ValTree,
 };
 use rustc_span::source_map::Spanned;
+use std::any::Any;
 use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -508,7 +510,6 @@ where
         }
     }
 
-    /// TODO(huan): refactor this function (update bytes to slice of ValTree)
     /// Use for deconstructing `ConstValue::Slice` (i.e., `&[u8]` and `&str`) and `ConstValue::ByRef`
     fn deconstruct_constant_array(
         &mut self,
@@ -605,16 +606,18 @@ where
         _user_ty: Option<UserTypeAnnotationIndex>, // TODO: Is this argument useful?
         literal: &Const<'tcx>,
     ) -> Rc<SymbolicValue> {
-        let mut val = literal.kind();
+        let mut val = literal.clone();
         let ty = literal.ty();
 
-        if let ConstKind::Unevaluated(unevaluated) = &literal.kind() {
-            let def_id = unevaluated.def;
-            let substs = unevaluated.args;
-            // TODO(huan): handle the following code require more expertise...
-            // let promoted = None;
+        if let ConstKind::Unevaluated(_) = &literal.kind() {
+            val = val.normalize(
+                self.body_visitor.context.tcx,
+                self.body_visitor.type_visitor.get_param_env(),
+            );
+            // FIXME(huan): IGNORED It seems that in the new version, the notion of `promote` have been removed.
+            // So the following code is commented out.
             // if def_ty.const_param_did.is_some() {
-            //     val = val.normalize(
+            //     val = val.eval(
             //         self.body_visitor.context.tcx,
             //         self.body_visitor.type_visitor.get_param_env(),
             //     );
@@ -653,11 +656,11 @@ where
             //             return val_at_path;
             //         }
             //         // Seems like a lazily serialized constant. Force evaluation.
-            //         val = val.normalize(
+            //         val = val.eval(
             //             self.body_visitor.context.tcx,
             //             self.body_visitor.type_visitor.get_param_env(),
             //         );
-            //         if let ConstKind::Unevaluated(..) = &val {
+            //         if let rustc_middle::ty::ConstKind::Unevaluated(..) = &val {
             //             // val.eval did not manage to evaluate this, go with unknown.
             //             return val_at_path;
             //         }
@@ -673,10 +676,10 @@ where
             | TyKind::Char
             | TyKind::Float(..)
             | TyKind::Int(..)
-            | TyKind::Uint(..) => match &val {
+            | TyKind::Uint(..) => match val.kind() {
                 ConstKind::Param(ParamConst { index, .. }) => {
                     if let Some(gen_args) = self.body_visitor.type_visitor.generic_arguments {
-                        match gen_args.as_ref().get(*index as usize) {
+                        match gen_args.as_ref().get(index as usize) {
                             Some(arg_val) => {
                                 return self.visit_constant(None, &arg_val.expect_const());
                             }
@@ -728,7 +731,7 @@ where
             }
             // References
             TyKind::Ref(_, t, _) if matches!(t.kind(), TyKind::Str) => {
-                if let ConstKind::Value(ValTree::Branch(slice)) = &val {
+                if let ConstKind::Value(ValTree::Branch(slice)) = val.kind() {
                     return self.get_reference_to_slice(ty.kind(), slice);
                 } else {
                     debug!("unsupported val of type Ref: {:?}", literal);
@@ -738,7 +741,7 @@ where
             TyKind::Ref(_, t, _) if matches!(t.kind(), TyKind::Array(..)) => {
                 if let TyKind::Array(elem_type, length) = *t.kind() {
                     return self.visit_reference_to_array_constant(
-                        &val,
+                        &val.kind(),
                         literal.ty(),
                         elem_type,
                         &length,
@@ -747,7 +750,7 @@ where
                     unreachable!(); // match guard
                 }
             }
-            TyKind::Ref(_, t, _) if matches!(t.kind(), TyKind::Slice(..)) => match &val {
+            TyKind::Ref(_, t, _) if matches!(t.kind(), TyKind::Slice(..)) => match val.kind() {
                 ConstKind::Value(ValTree::Branch(slice)) => {
                     let bytes = self.valtree_slice_to_bytes(slice);
                     let e_type = if let TyKind::Slice(elem_type) = t.kind() {
@@ -762,9 +765,9 @@ where
                 }
             },
             TyKind::RawPtr(ty, _) | TyKind::Ref(_, ty, _)
-                if matches!(val, ConstKind::Value(ValTree::Leaf(..))) =>
+                if matches!(val.kind(), ConstKind::Value(ValTree::Leaf(..))) =>
             {
-                match val {
+                match val.kind() {
                     ConstKind::Value(ValTree::Leaf(scalar_int)) => {
                         let size = scalar_int.size();
                         // If this is not a Zero-Sized Type (ZST)
@@ -789,7 +792,7 @@ where
             TyKind::Adt(adt_def, _) if adt_def.is_enum() => {
                 return self.get_enum_variant_as_constant(literal, ty);
             }
-            TyKind::Tuple(..) | TyKind::Adt(..) => match val {
+            TyKind::Tuple(..) | TyKind::Adt(..) => match val.kind() {
                 ConstKind::Value(ValTree::Leaf(scalar_int)) => {
                     let size = scalar_int.size().bytes();
                     if size == 0 {
@@ -1702,7 +1705,7 @@ where
             };
         // let alignment = Rc::new(1u128.into());
         let value = match null_op {
-            // FIXME(huan): Box is removed; we need to handle it properly
+            // FIXME(huan): IGNORED Box is removed; we need to handle it properly
             // mir::NullOp::Box => {
             //     path = Path::new_field(Path::new_field(path, 0), 0);
             //     self.body_visitor.get_new_heap_block(len, alignment, ty)
@@ -1770,7 +1773,7 @@ where
             | mir::CastKind::PointerExposeProvenance
             | mir::CastKind::PointerWithExposedProvenance
             | mir::CastKind::PointerCoercion(_)
-            // TODO(huan): the following kinds require further analysis
+            // TODO(huan): IGNORED the following kinds require further analysis
             | mir::CastKind::DynStar
             | mir::CastKind::Transmute => {
                 self.visit_use(path, operand);

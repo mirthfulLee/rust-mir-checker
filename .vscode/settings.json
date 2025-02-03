@@ -1,30 +1,7 @@
 {
+    "rust-analyzer.rustc.source": "discover",
     "rust-analyzer.server.extraEnv": {
-        "LIBCLANG_PATH": "/usr/lib/llvm-15/lib/libclang.so",
+        // "LIBCLANG_PATH": "/usr/lib/llvm-15/lib/libclang.so",
         "RUSTFLAGS": "-Clink-arg=-fuse-ld=lld",
-        "RUSTC_BOOTSTRAP": "123456",
-        "CFG_RELEASE": "1.99.0",
-        "CFG_RELEASE_CHANNEL": "dev",
-        "RUSTC_INSTALL_BINDIR": "/dev/null"
-    },
-    "rust-analyzer.runnables.extraEnv": {
-        "LIBCLANG_PATH": "/usr/lib/llvm-15/lib/libclang.so",
-        "RUSTFLAGS": "-Clink-arg=-fuse-ld=lld",
-        "RUSTC_BOOTSTRAP": "123456",
-        "CFG_RELEASE": "1.99.0",
-        "CFG_RELEASE_CHANNEL": "dev",
-        "RUSTC_INSTALL_BINDIR": "/dev/null"
-    },
-    "rust-analyzer.cargo.extraEnv": {
-        "RUSTC_BOOTSTRAP": "123456",
-        "CFG_RELEASE": "1.99.0",
-        "CFG_RELEASE_CHANNEL": "dev",
-        "RUSTC_INSTALL_BINDIR": "/dev/null"
-    },
-    "rust-analyzer.check.extraEnv": {
-        "RUSTC_BOOTSTRAP": "123456",
-        "CFG_RELEASE": "1.99.0",
-        "CFG_RELEASE_CHANNEL": "dev",
-        "RUSTC_INSTALL_BINDIR": "/dev/null"
     },
 }

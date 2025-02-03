@@ -13,7 +13,8 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::ty::ty_kind::TyKind;
 use rustc_middle::ty::{
-    GenericArg, GenericArgKind, GenericArgs, GenericArgsRef, ParamTy, Ty, TyCtxt,
+    Binder, ExistentialPredicate, ExistentialProjection, ExistentialTraitRef, FnSig, GenericArg,
+    GenericArgKind, GenericArgs, GenericArgsRef, ParamTy, Ty, TyCtxt,
 };
 use rustc_target::abi::FieldIdx;
 use std::collections::HashMap;
@@ -399,60 +400,65 @@ impl<'compilation, 'tcx> TypeVisitor<'tcx> {
             TyKind::FnDef(def_id, substs) => self
                 .tcx
                 .mk_ty_from_kind(TyKind::FnDef(*def_id, self.specialize_substs(substs, map))),
-            // TODO(huan): require further analysis
-            // TyKind::FnPtr(fn_sig) => {
-            //     let map_fn_sig = |fn_sig: FnSig<'tcx>| {
-            //         let specialized_inputs_and_output = self.tcx.mk_ty_from_kind(TyKind::FnPtr(
-            //             fn_sig
-            //                 .inputs_and_output
-            //                 .iter()
-            //                 .map(|ty| self.specialize_generic_argument_type(ty, map)),
-            //         ));
-            //         FnSig {
-            //             inputs_and_output: *specialized_inputs_and_output,
-            //             c_variadic: fn_sig.c_variadic,
-            //             unsafety: fn_sig.unsafety,
-            //             abi: fn_sig.abi,
-            //         }
-            //     };
-            //     let specialized_fn_sig = fn_sig.map_bound(map_fn_sig);
-            //     self.tcx.mk_ty_from_kind(TyKind::FnPtr(specialized_fn_sig))
-            // }
-            // TyKind::Dynamic(predicates, region, dynkind) => {
-            //     let map_predicates = |predicates| {
-            //         let eps =
-            //             predicates.iter().map(
-            //                 |pred: Binder<ExistentialPredicate<'tcx>>| match pred.skip_binder() {
-            //                     ExistentialPredicate::Trait(ExistentialTraitRef {
-            //                         def_id,
-            //                         args,
-            //                     }) => {
-            //                         Binder::bind(ExistentialPredicate::Trait(ExistentialTraitRef {
-            //                             def_id,
-            //                             args: self.specialize_substs(args, map),
-            //                         }))
-            //                     }
-            //                     ExistentialPredicate::Projection(ExistentialProjection {
-            //                         def_id,
-            //                         args,
-            //                         term,
-            //                     }) => Binder::bind(ExistentialPredicate::Projection(
-            //                         ExistentialProjection {
-            //                             def_id,
-            //                             args: self.specialize_substs(args, map),
-            //                             term: term,
-            //                         },
-            //                     )),
-            //                     ExistentialPredicate::AutoTrait(_) => pred,
-            //                 },
-            //             );
-            //         self.tcx.mk_poly_existential_predicates(eps)
-            //     };
-            //     let specialized_predicates = map_predicates(predicates);
-            //     // let specialized_predicates = predicates.map_bound(map_predicates);
-            //     self.tcx
-            //         .mk_ty_from_kind(TyKind::Dynamic(specialized_predicates, *region, *dynkind))
-            // }
+            TyKind::FnPtr(fn_sig) => {
+                let map_fn_sig = |fn_sig: FnSig<'tcx>| {
+                    let specialized_inputs_and_output: Vec<_> = fn_sig
+                        .inputs_and_output
+                        .iter()
+                        .map(|ty| self.specialize_generic_argument_type(ty, map))
+                        .collect();
+                    let specialized_inputs_and_output = self
+                        .tcx
+                        .mk_type_list(specialized_inputs_and_output.as_ref());
+                    FnSig {
+                        inputs_and_output: specialized_inputs_and_output,
+                        c_variadic: fn_sig.c_variadic,
+                        unsafety: fn_sig.unsafety,
+                        abi: fn_sig.abi,
+                    }
+                };
+                let specialized_fn_sig = fn_sig.map_bound(map_fn_sig);
+                self.tcx.mk_ty_from_kind(TyKind::FnPtr(specialized_fn_sig))
+            }
+            TyKind::Dynamic(predicates, region, dynkind) => {
+                let map_predicates = |predicates: &'tcx rustc_middle::ty::List<
+                    Binder<ExistentialPredicate<'tcx>>,
+                >| {
+                    let eps: Vec<_> = predicates
+                        .iter()
+                        .map(
+                            |pred: Binder<ExistentialPredicate<'tcx>>| match pred.skip_binder() {
+                                ExistentialPredicate::Trait(ExistentialTraitRef {
+                                    def_id,
+                                    args,
+                                }) => {
+                                    pred.rebind(ExistentialPredicate::Trait(ExistentialTraitRef {
+                                        def_id,
+                                        args: self.specialize_substs(args, map),
+                                    }))
+                                }
+                                ExistentialPredicate::Projection(ExistentialProjection {
+                                    def_id,
+                                    args,
+                                    term,
+                                }) => pred.rebind(ExistentialPredicate::Projection(
+                                    ExistentialProjection {
+                                        def_id,
+                                        args: self.specialize_substs(args, map),
+                                        term: term,
+                                    },
+                                )),
+                                ExistentialPredicate::AutoTrait(_) => pred,
+                            },
+                        )
+                        .collect();
+                    self.tcx.mk_poly_existential_predicates(eps.as_slice())
+                };
+                let specialized_predicates = map_predicates(predicates);
+                // let specialized_predicates = predicates.map_bound(map_predicates);
+                self.tcx
+                    .mk_ty_from_kind(TyKind::Dynamic(specialized_predicates, *region, *dynkind))
+            }
             TyKind::Tuple(substs) => {
                 let specialized_substs = substs
                     .iter()

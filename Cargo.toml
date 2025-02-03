@@ -30,18 +30,23 @@ serde_json = "1.0.61"
 home = "0.5.9"
 apron-sys = { path = "./apron-sys" }
 
-rustc_ast = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_ast" }
-rustc_abi = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_abi" }
-rustc_data_structures = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_data_structures" }
-rustc_driver = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_driver" }
-rustc_errors = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_errors" }
-rustc_hir = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_hir" }
-rustc_interface = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
-rustc_middle = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_middle" }
-rustc_session = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_session" }
-rustc_span = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_span" }
-rustc_target = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_target" }
+# rustc_ast = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_ast" }
+# rustc_abi = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_abi" }
+# rustc_data_structures = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_data_structures" }
+# rustc_driver = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_driver" , crate-type = ["dylib"] }
+# rustc_errors = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_errors" }
+# rustc_hir = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_hir" }
+# rustc_interface = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
+# rustc_middle = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_middle" }
+# rustc_session = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_session" }
+# rustc_span = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_span" }
+# rustc_target = { path = "lib/rustlib/rustc-src/rust/compiler/rustc_target" }
 
 
 [profile.release]
 lto = true
+
+[package.metadata.rust-analyzer]
+# This crate uses #[feature(rustc_private)].
+# See https://github.com/rust-analyzer/rust-analyzer/pull/7891
+rustc_private = true

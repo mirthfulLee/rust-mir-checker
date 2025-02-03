@@ -110,6 +110,19 @@ impl<'compiler> Diagnostic<'compiler> {
             Ordering::Equal
         }
     }
+
+    pub fn upgrade_to_error(&self) -> Self {
+        let msg = match self.builder.deref().messages.get(0) {
+            Some((msg, _)) => msg.as_str().unwrap_or_default().to_string(),
+            None => String::new(),
+        };
+        let new_builder = DiagnosticBuilder::new(self.builder.dcx, rustc_errors::Level::Error, msg);
+        Self {
+            builder: new_builder,
+            is_memory_safety: self.is_memory_safety,
+            cause: self.cause.clone(),
+        }
+    }
 }
 
 /// Store all the diagnoses generated for each `DefId`
